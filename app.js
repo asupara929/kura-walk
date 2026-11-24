@@ -95,6 +95,135 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+// キャラクターの部屋内トコトコ移動制御
+const roomBox = document.getElementById("roomBox");
+const charBadge = document.getElementById("charBadge");
+let charWalkRafId = null;
+let charPauseTimeoutId = null;
+let charCurrentX = 0;
+let charTargetX = 0;
+let charIsWalking = false;
+let charLastFrameTime = null;
+
+function getCharMoveBounds() {
+  if (!roomBox || !charBadge) return { minX: 0, maxX: 0 };
+  const roomWidth = roomBox.clientWidth || 320;
+  const badgeWidth = charBadge.offsetWidth || 90;
+  const padding = 14;
+  const halfSpan = Math.max(12, (roomWidth - badgeWidth) / 2 - padding);
+  return { minX: -halfSpan, maxX: halfSpan };
+}
+
+function applyCharPosition() {
+  if (!charBadge) return;
+  charBadge.style.transform = `translateX(calc(-50% + ${Math.round(charCurrentX)}px))`;
+  charBadge.classList.toggle("walking", charIsWalking);
+}
+
+function pickNextCharTarget() {
+  const { minX, maxX } = getCharMoveBounds();
+  if (maxX <= minX + 4) {
+    charTargetX = 0;
+    charIsWalking = false;
+    applyCharPosition();
+    return;
+  }
+  let nextX = minX + Math.random() * (maxX - minX);
+  if (Math.abs(nextX - charCurrentX) < 28) {
+    nextX = charCurrentX > 0 ? minX + Math.random() * 24 : maxX - Math.random() * 24;
+  }
+  charTargetX = Math.max(minX, Math.min(maxX, nextX));
+  charIsWalking = true;
+  applyCharPosition();
+}
+
+function scheduleCharPauseThenWalk() {
+  charIsWalking = false;
+  applyCharPosition();
+  clearTimeout(charPauseTimeoutId);
+  const pauseMs = 900 + Math.random() * 1400;
+  charPauseTimeoutId = setTimeout(() => {
+    if (document.getElementById("home")?.classList.contains("active")) {
+      pickNextCharTarget();
+    }
+  }, pauseMs);
+}
+
+function stepCharWalk(timestamp) {
+  if (!document.getElementById("home")?.classList.contains("active")) {
+    charWalkRafId = null;
+    charLastFrameTime = null;
+    return;
+  }
+
+  if (charLastFrameTime === null) {
+    charLastFrameTime = timestamp;
+  }
+  const dtSec = Math.min(0.05, (timestamp - charLastFrameTime) / 1000);
+  charLastFrameTime = timestamp;
+
+  const { minX, maxX } = getCharMoveBounds();
+  charCurrentX = Math.max(minX, Math.min(maxX, charCurrentX));
+  charTargetX = Math.max(minX, Math.min(maxX, charTargetX));
+
+  if (charIsWalking) {
+    const speedPxPerSec = 36;
+    const diff = charTargetX - charCurrentX;
+    const step = Math.sign(diff) * Math.min(Math.abs(diff), speedPxPerSec * dtSec);
+    charCurrentX += step;
+    applyCharPosition();
+
+    if (Math.abs(charTargetX - charCurrentX) < 1.5) {
+      charCurrentX = charTargetX;
+      scheduleCharPauseThenWalk();
+    }
+  }
+
+  charWalkRafId = requestAnimationFrame(stepCharWalk);
+}
+
+function startCharMovement() {
+  clearTimeout(charPauseTimeoutId);
+  const { minX, maxX } = getCharMoveBounds();
+  charCurrentX = Math.max(minX, Math.min(maxX, charCurrentX));
+  if (!charIsWalking) {
+    pickNextCharTarget();
+  }
+  if (charWalkRafId === null) {
+    charLastFrameTime = null;
+    charWalkRafId = requestAnimationFrame(stepCharWalk);
+  }
+}
+
+function stopCharMovement() {
+  clearTimeout(charPauseTimeoutId);
+  charPauseTimeoutId = null;
+  if (charWalkRafId !== null) {
+    cancelAnimationFrame(charWalkRafId);
+    charWalkRafId = null;
+  }
+  charLastFrameTime = null;
+  charIsWalking = false;
+  applyCharPosition();
+}
+
+function resetCharMovement() {
+  stopCharMovement();
+  charCurrentX = 0;
+  charTargetX = 0;
+  applyCharPosition();
+  if (document.getElementById("home")?.classList.contains("active")) {
+    startCharMovement();
+  }
+}
+
+window.addEventListener("resize", () => {
+  const { minX, maxX } = getCharMoveBounds();
+  charCurrentX = Math.max(minX, Math.min(maxX, charCurrentX));
+  charTargetX = Math.max(minX, Math.min(maxX, charTargetX));
+  applyCharPosition();
+});
+
 // Supabase へ自分のスコア・プロフィールを送信（upsert）
 async function syncMyScoreToSupabase() {
   const syncEl = document.getElementById("syncStatusText");
@@ -505,6 +634,7 @@ function renderAll() {
   renderInventory();
   renderRanking();
   renderCoupons();
+  applyCharPosition();
 }
 
 function renderRanking() {
@@ -722,6 +852,11 @@ tabButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     const targetId = btn.dataset.target;
     if (targetId !== "qr") stopQrCamera();
+    if (targetId === "home") {
+      startCharMovement();
+    } else {
+      stopCharMovement();
+    }
     if (targetId === "ranking") fetchOnlineRankings();
     tabButtons.forEach((b) => b.classList.toggle("active", b === btn));
     screens.forEach((s) => s.classList.toggle("active", s.id === targetId));
@@ -804,6 +939,7 @@ document.getElementById("resetDataBtn").addEventListener("click", () => {
   document.getElementById("gachaResultCard").style.display = "none";
   document.getElementById("qrResultCard").style.display = "none";
   renderAll();
+  resetCharMovement();
   openProfileModal(true);
 });
 
@@ -818,6 +954,7 @@ if (supabaseClient) {
 }
 
 renderAll();
+startCharMovement();
 if (!state.registered) {
   openProfileModal(true);
 } else {
