@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>くらうぉーく - Step 4</title>
+  <title>くらうぉーく - オンラインランキング対応</title>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --font-scale: 1;
@@ -252,7 +253,6 @@
       transform: translate(-50%, -50%);
     }
 
-    /* QRスキャナーエリア */
     .qr-viewport {
       border: 3px solid #111111;
       width: 220px;
@@ -334,7 +334,8 @@
           <button class="action-btn primary" id="gachaBtn" disabled>ガチャを引く</button>
           <button class="action-btn" id="toggleGpsBtn">GPS計測：開始</button>
         </div>
-        <div class="small-note" id="gpsStatusText">GPS未開始（HTTPSまたはlocalhostで動作）</div>
+        <div class="small-note" id="gpsStatusText">GPS未開始</div>
+        <div class="small-note" id="syncStatusText">オンライン同期：待機中</div>
       </div>
 
       <div class="card">
@@ -354,7 +355,12 @@
 
     <!-- 2. ランキング画面 -->
     <section id="ranking" class="screen">
-      <div class="card" id="myRankSummary">自分の順位を確認中...</div>
+      <div class="card">
+        <div id="myRankSummary">自分の順位を確認中...</div>
+        <div class="btn-row">
+          <button type="button" class="action-btn" id="refreshRankingBtn">🔄 ランキング更新</button>
+        </div>
+      </div>
       <div id="rankingList"></div>
     </section>
 
@@ -448,10 +454,29 @@
   </div>
 
   <script>
-    const STORAGE_KEY = "kurawalk_state_v3";
+    // ▼ ここに Supabase の Project URL と anon key を貼り付けてください
+    const SUPABASE_URL = "https://hwwgaqhewnpshaglqhwm.supabase.co/rest/v1/";
+    const SUPABASE_ANON_KEY = "sb_publishable_PF3KSMlsV-2cdHmkaV6_EQ_ocM5yMjC";
+
+    const isSupabaseConfigured =
+      SUPABASE_URL.startsWith("https://") &&
+      !SUPABASE_URL.includes("YOUR_PROJECT_ID") &&
+      SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY";
+
+    const supabaseClient = isSupabaseConfigured
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      : null;
+
+    const STORAGE_KEY = "kurawalk_state_v4";
     const METERS_PER_TICKET = 500;
 
+    function generateUserId() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+      return "user_" + Math.random().toString(36).slice(2) + Date.now();
+    }
+
     const DEFAULT_STATE = {
+      userId: generateUserId(),
       registered: false,
       userName: "ゲスト",
       userIcon: "🐶",
@@ -461,9 +486,7 @@
       totalDistance: 0,
       grantedTickets: 0,
       tickets: 0,
-      items: [
-        { type: "food", name: "ほねっこ", label: "餌：ほねっこ" }
-      ],
+      items: [{ type: "food", name: "ほねっこ", label: "餌：ほねっこ" }],
       coupons: [],
       claimedQrCodes: [],
       equippedDecor: "なし",
@@ -471,12 +494,11 @@
     };
 
     const DUMMY_OTHERS = [
-      { id: "u1", name: "田中", icon: "🦊", distance: 10000 },
-      { id: "u2", name: "山田", icon: "🐱", distance: 5000 },
-      { id: "u3", name: "山田", icon: "🐧", distance: 5000 },
-      { id: "u4", name: "まゆ", icon: "🐶", distance: 4000 },
-      { id: "u5", name: "あす", icon: "🐱", distance: 1000 },
-      { id: "u6", name: "ふじ", icon: "🦊", distance: 500 }
+      { user_id: "u1", user_name: "田中", user_icon: "🦊", distance: 10000 },
+      { user_id: "u2", user_name: "山田", user_icon: "🐱", distance: 5000 },
+      { user_id: "u3", user_name: "まゆ", user_icon: "🐶", distance: 4000 },
+      { user_id: "u4", user_name: "あす", user_icon: "🐱", distance: 1000 },
+      { user_id: "u5", user_name: "ふじ", user_icon: "🦊", distance: 500 }
     ];
 
     const GACHA_POOL = [
@@ -509,17 +531,80 @@
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return { ...DEFAULT_STATE };
-        return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+        if (!raw) return { ...DEFAULT_STATE, userId: generateUserId() };
+        const parsed = JSON.parse(raw);
+        return {
+          ...DEFAULT_STATE,
+          ...parsed,
+          userId: parsed.userId || generateUserId()
+        };
       } catch {
-        return { ...DEFAULT_STATE };
+        return { ...DEFAULT_STATE, userId: generateUserId() };
       }
     }
 
     let state = loadState();
+    let onlineRankings = [];
 
     function saveState() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    // Supabase へ自分のスコア・プロフィールを送信（upsert）
+    async function syncMyScoreToSupabase() {
+      const syncEl = document.getElementById("syncStatusText");
+      if (!supabaseClient) {
+        syncEl.textContent = "オンライン同期：未設定（ローカルモード）";
+        return;
+      }
+      if (!state.registered) return;
+
+      syncEl.textContent = "オンライン同期：送信中...";
+      const { error } = await supabaseClient.from("rankings").upsert({
+        user_id: state.userId,
+        user_name: state.userName,
+        user_icon: state.userIcon,
+        distance: Math.floor(state.totalDistance),
+        updated_at: new Date().toISOString()
+      });
+
+      if (error) {
+        syncEl.textContent = `オンライン同期エラー: ${error.message}`;
+      } else {
+        const nowStr = new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        syncEl.textContent = `オンライン同期：完了（${nowStr}）`;
+      }
+    }
+
+    // Supabase から全ユーザーのランキングを取得
+    async function fetchOnlineRankings() {
+      if (!supabaseClient) {
+        onlineRankings = [
+          ...DUMMY_OTHERS,
+          {
+            user_id: state.userId,
+            user_name: state.userName,
+            user_icon: state.userIcon,
+            distance: Math.floor(state.totalDistance)
+          }
+        ].sort((a, b) => b.distance - a.distance);
+        renderRanking();
+        return;
+      }
+
+      const { data, error } = await supabaseClient
+        .from("rankings")
+        .select("user_id, user_name, user_icon, distance")
+        .order("distance", { ascending: false })
+        .limit(200);
+
+      if (error) {
+        document.getElementById("myRankSummary").textContent = `ランキング取得エラー: ${error.message}`;
+        return;
+      }
+
+      onlineRankings = data || [];
+      renderRanking();
     }
 
     function formatDistance(meters) {
@@ -530,7 +615,7 @@
       return `${m} m`;
     }
 
-    function addDistance(deltaMeters) {
+    async function addDistance(deltaMeters) {
       if (deltaMeters <= 0) return;
       state.totalDistance += deltaMeters;
 
@@ -543,6 +628,8 @@
 
       saveState();
       renderAll();
+      await syncMyScoreToSupabase();
+      await fetchOnlineRankings();
     }
 
     function calcDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -632,10 +719,7 @@
 
       const picked = GACHA_POOL[Math.floor(Math.random() * GACHA_POOL.length)];
       if (picked.type === "coupon") {
-        state.coupons.unshift({
-          shop: picked.shop,
-          discount: picked.discount
-        });
+        state.coupons.unshift({ shop: picked.shop, discount: picked.discount });
       } else {
         state.items.push(picked);
         if (picked.type === "decor") state.equippedDecor = picked.name;
@@ -731,33 +815,33 @@
     }
 
     function renderRanking() {
-      const combined = [
-        ...DUMMY_OTHERS,
+      const list = onlineRankings.length > 0 ? onlineRankings : [
         {
-          id: "me",
-          name: state.userName,
-          icon: state.userIcon,
-          distance: Math.floor(state.totalDistance),
-          isMe: true
+          user_id: state.userId,
+          user_name: state.userName,
+          user_icon: state.userIcon,
+          distance: Math.floor(state.totalDistance)
         }
-      ].sort((a, b) => b.distance - a.distance);
+      ];
 
-      const myIndex = combined.findIndex((u) => u.isMe);
+      const myIndex = list.findIndex((u) => u.user_id === state.userId);
+      const rankLabel = myIndex >= 0 ? `${myIndex + 1}位` : "圏外";
       document.getElementById("myRankSummary").textContent =
-        `あなた（${state.userName}）：${myIndex + 1}位 ／ ${formatDistance(state.totalDistance)}`;
+        `あなた（${state.userName}）：${rankLabel} ／ ${formatDistance(state.totalDistance)}`;
 
-      const top50 = combined.slice(0, 50);
+      const top50 = list.slice(0, 50);
       const listEl = document.getElementById("rankingList");
       listEl.innerHTML = top50
-        .map(
-          (u, idx) => `
-          <div class="list-row ${u.isMe ? "me" : ""}">
-            <span>${idx + 1}位</span>
-            <span>${u.icon} ${u.name}${u.isMe ? "（自分）" : ""}</span>
-            <span>${u.distance}m</span>
-          </div>
-        `
-        )
+        .map((u, idx) => {
+          const isMe = u.user_id === state.userId;
+          return `
+            <div class="list-row ${isMe ? "me" : ""}">
+              <span>${idx + 1}位</span>
+              <span>${u.user_icon} ${u.user_name}${isMe ? "（自分）" : ""}</span>
+              <span>${u.distance}m</span>
+            </div>
+          `;
+        })
         .join("");
     }
 
@@ -779,7 +863,6 @@
         .join("");
     }
 
-    // QRコード特典付与処理
     function handleScannedQrCode(rawText) {
       const code = (rawText || "").trim();
       const reward = QR_REWARDS[code];
@@ -809,7 +892,6 @@
         `${reward.title} から「${reward.item.label}」と「${reward.coupon.shop}（${reward.coupon.discount}）」を獲得！`;
     }
 
-    // カメラ＆jsQRスキャナー制御
     const qrVideo = document.getElementById("qrVideo");
     const qrCanvas = document.getElementById("qrCanvas");
     const qrCtx = qrCanvas.getContext("2d", { willReadFrequently: true });
@@ -880,12 +962,10 @@
 
     document.getElementById("startQrBtn").addEventListener("click", startQrCamera);
     document.getElementById("stopQrBtn").addEventListener("click", stopQrCamera);
-
     document.querySelectorAll("[data-sim-qr]").forEach((btn) => {
       btn.addEventListener("click", () => handleScannedQrCode(btn.dataset.simQr));
     });
 
-    // ミニゲーム制御
     const mgModal = document.getElementById("minigameModal");
     const mgStage = document.getElementById("mgStage");
     const mgTarget = document.getElementById("mgTarget");
@@ -943,17 +1023,19 @@
       mgModal.classList.remove("open");
     });
 
-    // タブ・設定・モーダル制御（別タブへ移ったらカメラも停止）
     const tabButtons = document.querySelectorAll(".tab-btn");
     const screens = document.querySelectorAll(".screen");
     tabButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const targetId = btn.dataset.target;
         if (targetId !== "qr") stopQrCamera();
+        if (targetId === "ranking") fetchOnlineRankings();
         tabButtons.forEach((b) => b.classList.toggle("active", b === btn));
         screens.forEach((s) => s.classList.toggle("active", s.id === targetId));
       });
     });
+
+    document.getElementById("refreshRankingBtn").addEventListener("click", fetchOnlineRankings);
 
     document.querySelectorAll("[data-scale]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -967,7 +1049,7 @@
     const usernameInput = document.getElementById("usernameInput");
     let selectedIcon = state.userIcon;
 
-function openProfileModal(isInitial) {
+    function openProfileModal(isInitial) {
       document.getElementById("modalTitle").textContent = isInitial ? "ユーザー登録" : "プロファイル編集";
       usernameInput.value = state.registered ? state.userName : "";
       selectedIcon = state.userIcon;
@@ -986,7 +1068,7 @@ function openProfileModal(isInitial) {
       });
     });
 
-    document.getElementById("saveProfileBtn").addEventListener("click", () => {
+    document.getElementById("saveProfileBtn").addEventListener("click", async () => {
       const name = usernameInput.value.trim();
       state.userName = name || "ゲスト";
       state.userIcon = selectedIcon;
@@ -994,6 +1076,8 @@ function openProfileModal(isInitial) {
       saveState();
       renderAll();
       modal.classList.remove("open");
+      await syncMyScoreToSupabase();
+      await fetchOnlineRankings();
     });
 
     document.getElementById("openProfileBtn").addEventListener("click", () => openProfileModal(false));
@@ -1016,6 +1100,7 @@ function openProfileModal(isInitial) {
       mgRunning = false;
       state = {
         ...DEFAULT_STATE,
+        userId: generateUserId(),
         items: [{ type: "food", name: "ほねっこ", label: "餌：ほねっこ" }],
         claimedQrCodes: []
       };
@@ -1026,9 +1111,21 @@ function openProfileModal(isInitial) {
       openProfileModal(true);
     });
 
+    // Realtime 購読（他の人が移動距離を更新したら自動でランキング表を更新）
+    if (supabaseClient) {
+      supabaseClient
+        .channel("public:rankings")
+        .on("postgres_changes", { event: "*", schema: "public", table: "rankings" }, () => {
+          fetchOnlineRankings();
+        })
+        .subscribe();
+    }
+
     renderAll();
     if (!state.registered) {
       openProfileModal(true);
+    } else {
+      syncMyScoreToSupabase().then(fetchOnlineRankings);
     }
   </script>
 </body>
