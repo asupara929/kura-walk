@@ -235,6 +235,8 @@
       padding: 16px;
       width: 100%;
       max-width: 340px;
+      max-height: 88vh;
+      overflow-y: auto;
     }
 
     .modal-box input[type="text"] {
@@ -243,6 +245,102 @@
       margin: 8px 0 12px;
       border: 1px solid #222222;
       font-size: calc(14px * var(--font-scale));
+    }
+
+    .gacha-stage {
+      border: 2px solid #222222;
+      background-color: #fff8e7;
+      padding: 12px;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    .capsule-hero {
+      font-size: 46px;
+      line-height: 1.2;
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+
+    .capsule-hero.shaking {
+      animation: capsuleShake 0.14s infinite alternate;
+    }
+
+    @keyframes capsuleShake {
+      0% { transform: rotate(-10deg) scale(1.04); }
+      100% { transform: rotate(10deg) scale(1.08); }
+    }
+
+    .gacha-anim-status {
+      font-size: calc(13px * var(--font-scale));
+      font-weight: bold;
+      margin-top: 4px;
+      min-height: 20px;
+    }
+
+    .gacha-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      margin-top: 10px;
+      text-align: left;
+    }
+
+    .gacha-cards-grid.single {
+      grid-template-columns: 1fr;
+    }
+
+    .gacha-card {
+      border: 1.5px solid #222222;
+      background-color: #ffffff;
+      padding: 7px 8px;
+      opacity: 0;
+      transform: translateY(8px) scale(0.96);
+      transition: opacity 0.16s ease, transform 0.16s ease;
+    }
+
+    .gacha-card.revealed {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .gacha-card.rarity-2 {
+      background-color: #e3f2fd;
+      border-color: #1565c0;
+    }
+
+    .gacha-card.rarity-3 {
+      background-color: #fff8dc;
+      border: 2px solid #d48806;
+      box-shadow: 0 0 0 1px #ffd666;
+    }
+
+    .rarity-tag {
+      display: inline-block;
+      font-size: calc(11px * var(--font-scale));
+      font-weight: bold;
+      padding: 1px 5px;
+      border: 1px solid #222222;
+      background-color: #ffffff;
+      margin-bottom: 3px;
+    }
+
+    .rarity-2 .rarity-tag {
+      background-color: #bbdefb;
+      border-color: #1565c0;
+      color: #0d47a1;
+    }
+
+    .rarity-3 .rarity-tag {
+      background-color: #ffe58f;
+      border-color: #d48806;
+      color: #7c4700;
+    }
+
+    .gacha-card-title {
+      font-size: calc(12px * var(--font-scale));
+      font-weight: bold;
+      line-height: 1.3;
     }
 
     .minigame-stage {
@@ -340,6 +438,7 @@
         <div>累積移動距離：<strong id="distanceDisplay">0 m</strong></div>
         <div class="small-note" id="nextTicketNote">次のガチャ券まで：あと 500 m</div>
         <div>所持ガチャ券：<strong id="ticketDisplay">0 枚</strong></div>
+        <div class="small-note">10連は★2以上（クーポン・インテリア・着せ替え）確定！</div>
         <div class="btn-row">
           <button class="action-btn primary" id="gachaBtn" disabled>ガチャを引く</button>
           <button class="action-btn primary" id="gacha10Btn" disabled>10連を引く（10枚）</button>
@@ -359,7 +458,7 @@
       </div>
 
       <div class="card" id="gachaResultCard" style="display: none;">
-        <div><strong>🎉 ガチャ結果</strong></div>
+        <div><strong>🎉 直近のガチャ結果</strong></div>
         <div id="gachaResultText" style="margin-top: 4px;"></div>
       </div>
     </section>
@@ -426,6 +525,22 @@
         <button class="action-btn" id="openProfileBtn">編集</button>
       </div>
     </section>
+  </div>
+
+  <!-- ガチャ演出モーダル -->
+  <div id="gachaModal" class="modal-backdrop">
+    <div class="modal-box">
+      <h3 id="gachaModalTitle">🎰 ガチャ演出</h3>
+      <div class="gacha-stage">
+        <div id="capsuleHero" class="capsule-hero shaking">🎁</div>
+        <div id="gachaAnimStatus" class="gacha-anim-status">抽選中...</div>
+        <div id="gachaCardsGrid" class="gacha-cards-grid"></div>
+      </div>
+      <div class="btn-row" style="justify-content: flex-end; margin-top: 12px;">
+        <button type="button" class="action-btn" id="revealAllGachaBtn">一括表示</button>
+        <button type="button" class="action-btn primary" id="closeGachaModalBtn" disabled>閉じる</button>
+      </div>
+    </div>
   </div>
 
   <!-- ユーザー登録 / プロファイル編集モーダル -->
@@ -498,7 +613,7 @@
       totalDistance: 0,
       grantedTickets: 0,
       tickets: 0,
-      items: [{ type: "food", name: "ほねっこ", label: "餌：ほねっこ" }],
+      items: [{ type: "food", name: "ほねっこ", label: "餌：ほねっこ", rarity: 1 }],
       coupons: [],
       claimedQrCodes: [],
       equippedDecor: "なし",
@@ -514,24 +629,24 @@
     ];
 
     const GACHA_POOL = [
-      { type: "food", name: "ほねっこ", label: "餌：ほねっこ" },
-      { type: "food", name: "おいしいカリカリ", label: "餌：おいしいカリカリ" },
-      { type: "decor", name: "赤いソファ", label: "インテリア：赤いソファ" },
-      { type: "decor", name: "星ランプ", label: "インテリア：星ランプ" },
-      { type: "accessory", name: "🎀青いリボン", label: "着せ替え：青いリボン" },
-      { type: "coupon", shop: "カフェ〇〇", discount: "100円引き", label: "クーポン：カフェ〇〇（100円引き）" },
-      { type: "coupon", shop: "ベーカリー△△", discount: "50円引き", label: "クーポン：ベーカリー△△（50円引き）" }
+      { type: "food", name: "ほねっこ", label: "餌：ほねっこ", rarity: 1, weight: 30 },
+      { type: "food", name: "おいしいカリカリ", label: "餌：おいしいカリカリ", rarity: 1, weight: 25 },
+      { type: "coupon", shop: "カフェ〇〇", discount: "100円引き", label: "クーポン：カフェ〇〇（100円引き）", rarity: 2, weight: 15 },
+      { type: "coupon", shop: "ベーカリー△△", discount: "50円引き", label: "クーポン：ベーカリー△△（50円引き）", rarity: 2, weight: 15 },
+      { type: "decor", name: "赤いソファ", label: "インテリア：赤いソファ", rarity: 3, weight: 5 },
+      { type: "decor", name: "星ランプ", label: "インテリア：星ランプ", rarity: 3, weight: 5 },
+      { type: "accessory", name: "🎀青いリボン", label: "着せ替え：青いリボン", rarity: 3, weight: 5 }
     ];
 
     const QR_REWARDS = {
       KURAWALK_SHOP_A: {
         title: "店舗A（カフェ〇〇）",
-        item: { type: "decor", name: "北欧ラグ", label: "インテリア：北欧ラグ" },
+        item: { type: "decor", name: "北欧ラグ", label: "インテリア：北欧ラグ", rarity: 3 },
         coupon: { shop: "カフェ〇〇", discount: "100円引き" }
       },
       KURAWALK_SHOP_B: {
         title: "店舗B（ベーカリー△△）",
-        item: { type: "accessory", name: "🕶️サングラス", label: "着せ替え：サングラス" },
+        item: { type: "accessory", name: "🕶️サングラス", label: "着せ替え：サングラス", rarity: 3 },
         coupon: { shop: "ベーカリー△△", discount: "50円引き" }
       }
     };
@@ -725,8 +840,19 @@
       document.getElementById("toggleGpsBtn").textContent = "GPS計測：開始";
     }
 
-    function drawSingleGacha() {
-      const picked = GACHA_POOL[Math.floor(Math.random() * GACHA_POOL.length)];
+    function pickFromPool(pool) {
+      const totalWeight = pool.reduce((sum, entry) => sum + (entry.weight || 1), 0);
+      let roll = Math.random() * totalWeight;
+      for (const entry of pool) {
+        roll -= (entry.weight || 1);
+        if (roll <= 0) {
+          return { ...entry };
+        }
+      }
+      return { ...pool[pool.length - 1] };
+    }
+
+    function applyRewardToState(picked) {
       if (picked.type === "coupon") {
         state.coupons.unshift({ shop: picked.shop, discount: picked.discount });
       } else {
@@ -734,14 +860,105 @@
         if (picked.type === "decor") state.equippedDecor = picked.name;
         if (picked.type === "accessory") state.equippedAccessory = picked.name;
       }
-      return picked;
+    }
+
+    function getRarityLabel(rarity) {
+      if (rarity >= 3) return "★3 レア";
+      if (rarity === 2) return "★2 確定枠対象";
+      return "★1";
+    }
+
+    const gachaModal = document.getElementById("gachaModal");
+    const capsuleHero = document.getElementById("capsuleHero");
+    const gachaAnimStatus = document.getElementById("gachaAnimStatus");
+    const gachaCardsGrid = document.getElementById("gachaCardsGrid");
+    const revealAllGachaBtn = document.getElementById("revealAllGachaBtn");
+    const closeGachaModalBtn = document.getElementById("closeGachaModalBtn");
+
+    let gachaTimers = [];
+
+    function clearGachaTimers() {
+      gachaTimers.forEach((id) => clearTimeout(id));
+      gachaTimers = [];
+    }
+
+    function revealAllGachaCards(results) {
+      clearGachaTimers();
+      const maxRarity = Math.max(...results.map((r) => r.rarity || 1));
+      capsuleHero.classList.remove("shaking");
+      capsuleHero.textContent = maxRarity >= 3 ? "✨" : "🎉";
+      gachaAnimStatus.textContent = maxRarity >= 3
+        ? "★3 アイテム出現！結果を確認してください"
+        : "獲得結果を確認してください！";
+
+      gachaCardsGrid.querySelectorAll(".gacha-card").forEach((card) => {
+        card.classList.add("revealed");
+      });
+      revealAllGachaBtn.disabled = true;
+      closeGachaModalBtn.disabled = false;
+    }
+
+    function playGachaAnimation(results, isTenPull) {
+      clearGachaTimers();
+      document.getElementById("gachaModalTitle").textContent = isTenPull
+        ? "🎰 10連ガチャ演出"
+        : "🎰 ガチャ演出";
+
+      gachaCardsGrid.className = isTenPull ? "gacha-cards-grid" : "gacha-cards-grid single";
+      gachaCardsGrid.innerHTML = results
+        .map(
+          (item) => `
+          <div class="gacha-card rarity-${item.rarity || 1}">
+            <div class="rarity-tag">${getRarityLabel(item.rarity || 1)}</div>
+            <div class="gacha-card-title">${item.label}</div>
+          </div>
+        `
+        )
+        .join("");
+
+      capsuleHero.textContent = "🎁";
+      capsuleHero.classList.add("shaking");
+      gachaAnimStatus.textContent = "カプセルをオープン中...";
+      revealAllGachaBtn.disabled = false;
+      closeGachaModalBtn.disabled = true;
+      gachaModal.classList.add("open");
+
+      const cards = Array.from(gachaCardsGrid.querySelectorAll(".gacha-card"));
+      const stepMs = isTenPull ? 95 : 180;
+      const openDelayMs = 360;
+
+      const openTimer = setTimeout(() => {
+        capsuleHero.classList.remove("shaking");
+        capsuleHero.textContent = "🎊";
+        gachaAnimStatus.textContent = "アイテム獲得！";
+
+        cards.forEach((card, idx) => {
+          const t = setTimeout(() => {
+            card.classList.add("revealed");
+            if (idx === cards.length - 1) {
+              revealAllGachaBtn.disabled = true;
+              closeGachaModalBtn.disabled = false;
+              const maxRarity = Math.max(...results.map((r) => r.rarity || 1));
+              if (maxRarity >= 3) {
+                capsuleHero.textContent = "✨";
+                gachaAnimStatus.textContent = "★3 ゲット！おめでとうございます！";
+              }
+            }
+          }, idx * stepMs);
+          gachaTimers.push(t);
+        });
+      }, openDelayMs);
+
+      gachaTimers.push(openTimer);
+      revealAllGachaBtn.onclick = () => revealAllGachaCards(results);
     }
 
     function pullGacha() {
       if (state.tickets <= 0) return;
       state.tickets -= 1;
 
-      const picked = drawSingleGacha();
+      const picked = pickFromPool(GACHA_POOL);
+      applyRewardToState(picked);
 
       saveState();
       renderAll();
@@ -749,17 +966,27 @@
       const resCard = document.getElementById("gachaResultCard");
       const resText = document.getElementById("gachaResultText");
       resCard.style.display = "block";
-      resText.textContent = `「${picked.label}」を獲得しました！`;
+      resText.textContent = `[${getRarityLabel(picked.rarity || 1)}] ${picked.label}`;
+
+      playGachaAnimation([picked], false);
     }
 
     function pullTenGacha() {
       if (state.tickets < MULTI_GACHA_COUNT) return;
       state.tickets -= MULTI_GACHA_COUNT;
 
+      const guaranteedPool = GACHA_POOL.filter((entry) => (entry.rarity || 1) >= 2);
       const results = [];
       for (let i = 0; i < MULTI_GACHA_COUNT; i += 1) {
-        results.push(drawSingleGacha());
+        results.push(pickFromPool(GACHA_POOL));
       }
+
+      const hasGuaranteed = results.some((item) => (item.rarity || 1) >= 2);
+      if (!hasGuaranteed && guaranteedPool.length > 0) {
+        results[results.length - 1] = pickFromPool(guaranteedPool);
+      }
+
+      results.forEach((item) => applyRewardToState(item));
 
       saveState();
       renderAll();
@@ -768,12 +995,19 @@
       const resText = document.getElementById("gachaResultText");
       resCard.style.display = "block";
       resText.innerHTML = `
-        <div>10連の結果：</div>
+        <div>10連の結果（★2以上確定）：</div>
         <ol class="gacha-result-list">
-          ${results.map((item) => `<li>${item.label}</li>`).join("")}
+          ${results.map((item) => `<li>[${getRarityLabel(item.rarity || 1)}] ${item.label}</li>`).join("")}
         </ol>
       `;
+
+      playGachaAnimation(results, true);
     }
+
+    closeGachaModalBtn.addEventListener("click", () => {
+      clearGachaTimers();
+      gachaModal.classList.remove("open");
+    });
 
     function useItem(index) {
       const item = state.items[index];
@@ -1140,10 +1374,12 @@
       stopQrCamera();
       clearInterval(mgInterval);
       mgRunning = false;
+      clearGachaTimers();
+      gachaModal.classList.remove("open");
       state = {
         ...DEFAULT_STATE,
         userId: generateUserId(),
-        items: [{ type: "food", name: "ほねっこ", label: "餌：ほねっこ" }],
+        items: [{ type: "food", name: "ほねっこ", label: "餌：ほねっこ", rarity: 1 }],
         claimedQrCodes: []
       };
       saveState();
