@@ -204,6 +204,16 @@
       margin-top: 4px;
     }
 
+    .gacha-result-list {
+      margin-top: 6px;
+      padding-left: 18px;
+      font-size: calc(13px * var(--font-scale));
+    }
+
+    .gacha-result-list li {
+      margin-bottom: 3px;
+    }
+
     .modal-backdrop {
       display: none;
       position: fixed;
@@ -332,6 +342,7 @@
         <div>所持ガチャ券：<strong id="ticketDisplay">0 枚</strong></div>
         <div class="btn-row">
           <button class="action-btn primary" id="gachaBtn" disabled>ガチャを引く</button>
+          <button class="action-btn primary" id="gacha10Btn" disabled>10連を引く（10枚）</button>
           <button class="action-btn" id="toggleGpsBtn">GPS計測：開始</button>
         </div>
         <div class="small-note" id="gpsStatusText">GPS未開始</div>
@@ -469,6 +480,7 @@
 
     const STORAGE_KEY = "kurawalk_state_v4";
     const METERS_PER_TICKET = 500;
+    const MULTI_GACHA_COUNT = 10;
 
     function generateUserId() {
       if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -713,10 +725,7 @@
       document.getElementById("toggleGpsBtn").textContent = "GPS計測：開始";
     }
 
-    function pullGacha() {
-      if (state.tickets <= 0) return;
-      state.tickets -= 1;
-
+    function drawSingleGacha() {
       const picked = GACHA_POOL[Math.floor(Math.random() * GACHA_POOL.length)];
       if (picked.type === "coupon") {
         state.coupons.unshift({ shop: picked.shop, discount: picked.discount });
@@ -725,6 +734,14 @@
         if (picked.type === "decor") state.equippedDecor = picked.name;
         if (picked.type === "accessory") state.equippedAccessory = picked.name;
       }
+      return picked;
+    }
+
+    function pullGacha() {
+      if (state.tickets <= 0) return;
+      state.tickets -= 1;
+
+      const picked = drawSingleGacha();
 
       saveState();
       renderAll();
@@ -733,6 +750,29 @@
       const resText = document.getElementById("gachaResultText");
       resCard.style.display = "block";
       resText.textContent = `「${picked.label}」を獲得しました！`;
+    }
+
+    function pullTenGacha() {
+      if (state.tickets < MULTI_GACHA_COUNT) return;
+      state.tickets -= MULTI_GACHA_COUNT;
+
+      const results = [];
+      for (let i = 0; i < MULTI_GACHA_COUNT; i += 1) {
+        results.push(drawSingleGacha());
+      }
+
+      saveState();
+      renderAll();
+
+      const resCard = document.getElementById("gachaResultCard");
+      const resText = document.getElementById("gachaResultText");
+      resCard.style.display = "block";
+      resText.innerHTML = `
+        <div>10連の結果：</div>
+        <ol class="gacha-result-list">
+          ${results.map((item) => `<li>${item.label}</li>`).join("")}
+        </ol>
+      `;
     }
 
     function useItem(index) {
@@ -808,6 +848,7 @@
       document.getElementById("nextTicketNote").textContent = `次のガチャ券まで：あと ${toNext} m`;
       document.getElementById("ticketDisplay").textContent = `${state.tickets} 枚`;
       document.getElementById("gachaBtn").disabled = state.tickets <= 0;
+      document.getElementById("gacha10Btn").disabled = state.tickets < MULTI_GACHA_COUNT;
 
       renderInventory();
       renderRanking();
@@ -1087,6 +1128,7 @@
     });
 
     document.getElementById("gachaBtn").addEventListener("click", pullGacha);
+    document.getElementById("gacha10Btn").addEventListener("click", pullTenGacha);
 
     document.getElementById("toggleGpsBtn").addEventListener("click", () => {
       if (watchId !== null) stopGps();
