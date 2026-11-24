@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>くらうぉーく - Step 4</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    :root {
+      --font-scale: 1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #ececec;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+      font-size: calc(16px * var(--font-scale));
+    }
+
+    .phone-frame {
+      width: min(100vw, 430px);
+      aspect-ratio: 9 / 20;
+      max-height: 96vh;
+      background-color: #ffffff;
+      border: 2px solid #222222;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    }
+
+    .tab-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border-bottom: 2px solid #222222;
+      background-color: #ffffff;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      height: 52px;
+      border: none;
+      border-right: 1px solid #222222;
+      background-color: #ffffff;
+      color: #111111;
+      font-size: calc(18px * var(--font-scale));
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tab-btn:last-child {
+      border-right: none;
+    }
+
+    .tab-btn.active {
+      background-color: #9e9e9e;
+    }
+
+    .screen {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .room-box {
+      border: 2px solid #5c3a21;
+      background: linear-gradient(to bottom, #c96a4b 0%, #c96a4b 68%, #e2b482 68%, #e2b482 100%);
+      height: 200px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 10px;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .decor-tag {
+      background-color: rgba(255, 255, 255, 0.92);
+      border: 1px solid #222222;
+      padding: 2px 8px;
+      font-size: calc(12px * var(--font-scale));
+    }
+
+    .char-badge {
+      background-color: #e6a82e;
+      border: 2px solid #222222;
+      padding: 6px 12px;
+      font-weight: bold;
+    }
+
+    .status-bar-wrap {
+      margin-top: 6px;
+    }
+
+    .status-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: calc(13px * var(--font-scale));
+      margin-bottom: 2px;
+    }
+
+    .status-track {
+      height: 10px;
+      background-color: #e0e0e0;
+      border: 1px solid #222222;
+      overflow: hidden;
+    }
+
+    .status-fill {
+      height: 100%;
+      transition: width 0.2s ease;
+    }
+
+    .fill-hunger {
+      background-color: #4caf50;
+    }
+
+    .fill-happy {
+      background-color: #ff7043;
+    }
+
+    .card {
+      border: 1px solid #222222;
+      padding: 10px;
+      margin-bottom: 10px;
+      background-color: #fafafa;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    button.action-btn {
+      padding: 6px 10px;
+      border: 1px solid #222222;
+      background-color: #f5f5f5;
+      cursor: pointer;
+      font-size: calc(13px * var(--font-scale));
+    }
+
+    button.action-btn.primary {
+      background-color: #222222;
+      color: #ffffff;
+    }
+
+    button.action-btn.selected {
+      background-color: #222222;
+      color: #ffffff;
+    }
+
+    button.action-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .list-row {
+      border-bottom: 1px solid #222222;
+      padding: 10px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .list-row.me {
+      background-color: #fff3cd;
+      font-weight: bold;
+    }
+
+    .setting-item {
+      border-bottom: 1px solid #222222;
+      padding: 12px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .small-note {
+      font-size: calc(12px * var(--font-scale));
+      color: #444444;
+      margin-top: 4px;
+    }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #ffffff;
+      border: 2px solid #222222;
+      padding: 16px;
+      width: 100%;
+      max-width: 340px;
+    }
+
+    .modal-box input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      margin: 8px 0 12px;
+      border: 1px solid #222222;
+      font-size: calc(14px * var(--font-scale));
+    }
+
+    .minigame-stage {
+      border: 2px solid #222222;
+      background-color: #fff8e7;
+      height: 180px;
+      position: relative;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .tap-target {
+      position: absolute;
+      font-size: 30px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+    }
+
+    /* QRスキャナーエリア */
+    .qr-viewport {
+      border: 3px solid #111111;
+      width: 220px;
+      height: 220px;
+      margin: 12px auto;
+      position: relative;
+      background-color: #111111;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      text-align: center;
+    }
+
+    .qr-viewport video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+  <div class="phone-frame">
+    <nav class="tab-bar" aria-label="メインナビゲーション">
+      <button class="tab-btn active" data-target="home" title="ホーム">🏠</button>
+      <button class="tab-btn" data-target="ranking" title="ランキング">📊</button>
+      <button class="tab-btn" data-target="coupon" title="クーポン">🎟️</button>
+      <button class="tab-btn" data-target="qr" title="QRコード">📷</button>
+      <button class="tab-btn" data-target="settings" title="設定">⚙️</button>
+    </nav>
+
+    <!-- 1. ホーム画面 -->
+    <section id="home" class="screen active">
+      <div class="room-box">
+        <div id="roomDecorDisplay" class="decor-tag">インテリア：なし</div>
+        <div class="char-badge">
+          <span id="userIconDisplay">🐶</span>
+          <span id="charAccessoryDisplay"></span>
+          <span id="userNameDisplay">ゲスト</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div><strong>キャラクター育成</strong></div>
+        <div class="status-bar-wrap">
+          <div class="status-label">
+            <span>満腹度</span>
+            <span id="hungerText">50 / 100</span>
+          </div>
+          <div class="status-track">
+            <div id="hungerBar" class="status-fill fill-hunger" style="width: 50%;"></div>
+          </div>
+        </div>
+        <div class="status-bar-wrap">
+          <div class="status-label">
+            <span>嬉しさ</span>
+            <span id="happyText">50 / 100</span>
+          </div>
+          <div class="status-track">
+            <div id="happyBar" class="status-fill fill-happy" style="width: 50%;"></div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="action-btn primary" id="openMinigameBtn">🎮 ミニゲーム（5秒）</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div><strong>もちもの（餌・模様替え・着せ替え）</strong></div>
+        <div id="inventoryList" class="btn-row"></div>
+      </div>
+
+      <div class="card">
+        <div>累積移動距離：<strong id="distanceDisplay">0 m</strong></div>
+        <div class="small-note" id="nextTicketNote">次のガチャ券まで：あと 500 m</div>
+        <div>所持ガチャ券：<strong id="ticketDisplay">0 枚</strong></div>
+        <div class="btn-row">
+          <button class="action-btn primary" id="gachaBtn" disabled>ガチャを引く</button>
+          <button class="action-btn" id="toggleGpsBtn">GPS計測：開始</button>
+        </div>
+        <div class="small-note" id="gpsStatusText">GPS未開始（HTTPSまたはlocalhostで動作）</div>
+      </div>
+
+      <div class="card">
+        <div><strong>テスト用：移動距離を追加</strong></div>
+        <div class="btn-row">
+          <button class="action-btn" data-add-dist="200">+200m</button>
+          <button class="action-btn" data-add-dist="500">+500m</button>
+          <button class="action-btn" id="resetDataBtn">データ初期化</button>
+        </div>
+      </div>
+
+      <div class="card" id="gachaResultCard" style="display: none;">
+        <div><strong>🎉 ガチャ結果</strong></div>
+        <div id="gachaResultText" style="margin-top: 4px;"></div>
+      </div>
+    </section>
+
+    <!-- 2. ランキング画面 -->
+    <section id="ranking" class="screen">
+      <div class="card" id="myRankSummary">自分の順位を確認中...</div>
+      <div id="rankingList"></div>
+    </section>
+
+    <!-- 3. クーポン一覧画面 -->
+    <section id="coupon" class="screen">
+      <div id="couponList"></div>
+    </section>
+
+    <!-- 4. QRコード読み取り画面 -->
+    <section id="qr" class="screen">
+      <div class="qr-viewport" id="qrViewport">
+        <video id="qrVideo" playsinline muted style="display: none;"></video>
+        <div id="qrPlaceholder">カメラ停止中<br />「カメラ起動」を押してください</div>
+      </div>
+      <canvas id="qrCanvas" style="display: none;"></canvas>
+
+      <div class="btn-row" style="justify-content: center;">
+        <button type="button" class="action-btn primary" id="startQrBtn">カメラ起動</button>
+        <button type="button" class="action-btn" id="stopQrBtn" disabled>カメラ停止</button>
+      </div>
+      <div class="small-note" id="qrStatusText" style="text-align: center;">
+        店舗のQRコードを枠内に映してください
+      </div>
+
+      <div class="card" style="margin-top: 12px;">
+        <div><strong>テスト用：店舗QR疑似読み取り</strong></div>
+        <div class="small-note">対象コード：`KURAWALK_SHOP_A` / `KURAWALK_SHOP_B`</div>
+        <div class="btn-row">
+          <button type="button" class="action-btn" data-sim-qr="KURAWALK_SHOP_A">店舗A QR</button>
+          <button type="button" class="action-btn" data-sim-qr="KURAWALK_SHOP_B">店舗B QR</button>
+        </div>
+      </div>
+
+      <div class="card" id="qrResultCard" style="display: none;">
+        <div><strong>🎁 QR特典結果</strong></div>
+        <div id="qrResultText" style="margin-top: 4px;"></div>
+      </div>
+    </section>
+
+    <!-- 5. 設定画面 -->
+    <section id="settings" class="screen">
+      <div class="setting-item">
+        <span><strong>あ 文字設定</strong></span>
+        <div id="scaleBtnGroup">
+          <button class="action-btn" data-scale="0.9">小</button>
+          <button class="action-btn selected" data-scale="1">中</button>
+          <button class="action-btn" data-scale="1.15">大</button>
+        </div>
+      </div>
+      <div class="setting-item">
+        <span><strong>👤 プロファイル編集</strong></span>
+        <button class="action-btn" id="openProfileBtn">編集</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ユーザー登録 / プロファイル編集モーダル -->
+  <div id="profileModal" class="modal-backdrop">
+    <div class="modal-box">
+      <h3 id="modalTitle">ユーザー登録</h3>
+      <label for="usernameInput" class="small-note">ユーザー名</label>
+      <input type="text" id="usernameInput" maxlength="15" placeholder="例：ひなた" />
+      <div class="small-note">アイコン選択</div>
+      <div class="btn-row" id="iconChoices">
+        <button type="button" class="action-btn selected" data-icon="🐶">🐶</button>
+        <button type="button" class="action-btn" data-icon="🐱">🐱</button>
+        <button type="button" class="action-btn" data-icon="🦊">🦊</button>
+        <button type="button" class="action-btn" data-icon="🐧">🐧</button>
+      </div>
+      <div class="btn-row" style="margin-top: 14px; justify-content: flex-end;">
+        <button type="button" class="action-btn primary" id="saveProfileBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ミニゲームモーダル -->
+  <div id="minigameModal" class="modal-backdrop">
+    <div class="modal-box">
+      <h3>💖 ハートタップゲーム</h3>
+      <div class="small-note">
+        残り時間：<strong id="mgTimer">5.0</strong>秒 ／ タップ数：<strong id="mgScore">0</strong>
+      </div>
+      <div class="minigame-stage" id="mgStage">
+        <button type="button" class="tap-target" id="mgTarget" style="left: 50%; top: 50%;">💖</button>
+      </div>
+      <div id="mgResultNote" class="small-note" style="margin-top: 8px;"></div>
+      <div class="btn-row" style="justify-content: flex-end;">
+        <button type="button" class="action-btn" id="closeMinigameBtn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "kurawalk_state_v3";
+    const METERS_PER_TICKET = 500;
+
+    const DEFAULT_STATE = {
+      registered: false,
+      userName: "ゲスト",
+      userIcon: "🐶",
+      fontScale: 1,
+      hunger: 50,
+      happiness: 50,
+      totalDistance: 0,
+      grantedTickets: 0,
+      tickets: 0,
+      items: [
+        { type: "food", name: "ほねっこ", label: "餌：ほねっこ" }
+      ],
+      coupons: [],
+      claimedQrCodes: [],
+      equippedDecor: "なし",
+      equippedAccessory: ""
+    };
+
+    const DUMMY_OTHERS = [
+      { id: "u1", name: "田中", icon: "🦊", distance: 10000 },
+      { id: "u2", name: "山田", icon: "🐱", distance: 5000 },
+      { id: "u3", name: "山田", icon: "🐧", distance: 5000 },
+      { id: "u4", name: "まゆ", icon: "🐶", distance: 4000 },
+      { id: "u5", name: "あす", icon: "🐱", distance: 1000 },
+      { id: "u6", name: "ふじ", icon: "🦊", distance: 500 }
+    ];
+
+    const GACHA_POOL = [
+      { type: "food", name: "ほねっこ", label: "餌：ほねっこ" },
+      { type: "food", name: "おいしいカリカリ", label: "餌：おいしいカリカリ" },
+      { type: "decor", name: "赤いソファ", label: "インテリア：赤いソファ" },
+      { type: "decor", name: "星ランプ", label: "インテリア：星ランプ" },
+      { type: "accessory", name: "🎀青いリボン", label: "着せ替え：青いリボン" },
+      { type: "coupon", shop: "カフェ〇〇", discount: "100円引き", label: "クーポン：カフェ〇〇（100円引き）" },
+      { type: "coupon", shop: "ベーカリー△△", discount: "50円引き", label: "クーポン：ベーカリー△△（50円引き）" }
+    ];
+
+    const QR_REWARDS = {
+      KURAWALK_SHOP_A: {
+        title: "店舗A（カフェ〇〇）",
+        item: { type: "decor", name: "北欧ラグ", label: "インテリア：北欧ラグ" },
+        coupon: { shop: "カフェ〇〇", discount: "100円引き" }
+      },
+      KURAWALK_SHOP_B: {
+        title: "店舗B（ベーカリー△△）",
+        item: { type: "accessory", name: "🕶️サングラス", label: "着せ替え：サングラス" },
+        coupon: { shop: "ベーカリー△△", discount: "50円引き" }
+      }
+    };
+
+    function clampStat(val) {
+      return Math.max(0, Math.min(100, Math.round(val)));
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { ...DEFAULT_STATE };
+        return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+      } catch {
+        return { ...DEFAULT_STATE };
+      }
+    }
+
+    let state = loadState();
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function formatDistance(meters) {
+      const m = Math.floor(meters);
+      if (m >= 1000) {
+        return `${(m / 1000).toFixed(2)} km (${m} m)`;
+      }
+      return `${m} m`;
+    }
+
+    function addDistance(deltaMeters) {
+      if (deltaMeters <= 0) return;
+      state.totalDistance += deltaMeters;
+
+      const shouldHaveTotalTickets = Math.floor(state.totalDistance / METERS_PER_TICKET);
+      const newTickets = shouldHaveTotalTickets - state.grantedTickets;
+      if (newTickets > 0) {
+        state.grantedTickets += newTickets;
+        state.tickets += newTickets;
+      }
+
+      saveState();
+      renderAll();
+    }
+
+    function calcDistanceMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = (deg) => (deg * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    let watchId = null;
+    let lastPos = null;
+
+    function startGps() {
+      if (!navigator.geolocation) {
+        document.getElementById("gpsStatusText").textContent = "このブラウザはGPSに非対応です";
+        return;
+      }
+      lastPos = null;
+      document.getElementById("gpsStatusText").textContent = "位置情報を取得中...";
+      document.getElementById("toggleGpsBtn").textContent = "GPS計測：停止する";
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          const now = pos.timestamp || Date.now();
+
+          if (accuracy > 30) {
+            document.getElementById("gpsStatusText").textContent =
+              `GPS誤差が大きいため除外（誤差: ${Math.round(accuracy)}m）`;
+            return;
+          }
+
+          if (!lastPos) {
+            lastPos = { lat: latitude, lon: longitude, time: now };
+            document.getElementById("gpsStatusText").textContent =
+              `基準地点を記録（精度: ±${Math.round(accuracy)}m）`;
+            return;
+          }
+
+          const dist = calcDistanceMeters(lastPos.lat, lastPos.lon, latitude, longitude);
+          const elapsedSec = Math.max((now - lastPos.time) / 1000, 1);
+          const speedMps = dist / elapsedSec;
+
+          if (dist < 5) {
+            document.getElementById("gpsStatusText").textContent =
+              `移動微小（${dist.toFixed(1)}m）のため未加算`;
+            return;
+          }
+
+          if (speedMps > 2.22) {
+            lastPos = { lat: latitude, lon: longitude, time: now };
+            document.getElementById("gpsStatusText").textContent =
+              `速度が速いため除外（約${(speedMps * 3.6).toFixed(1)} km/h）`;
+            return;
+          }
+
+          lastPos = { lat: latitude, lon: longitude, time: now };
+          addDistance(dist);
+          document.getElementById("gpsStatusText").textContent =
+            `+${Math.round(dist)}m 計測（精度: ±${Math.round(accuracy)}m）`;
+        },
+        (err) => {
+          document.getElementById("gpsStatusText").textContent = `GPSエラー: ${err.message}`;
+          stopGps();
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+      );
+    }
+
+    function stopGps() {
+      if (watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      lastPos = null;
+      document.getElementById("toggleGpsBtn").textContent = "GPS計測：開始";
+    }
+
+    function pullGacha() {
+      if (state.tickets <= 0) return;
+      state.tickets -= 1;
+
+      const picked = GACHA_POOL[Math.floor(Math.random() * GACHA_POOL.length)];
+      if (picked.type === "coupon") {
+        state.coupons.unshift({
+          shop: picked.shop,
+          discount: picked.discount
+        });
+      } else {
+        state.items.push(picked);
+        if (picked.type === "decor") state.equippedDecor = picked.name;
+        if (picked.type === "accessory") state.equippedAccessory = picked.name;
+      }
+
+      saveState();
+      renderAll();
+
+      const resCard = document.getElementById("gachaResultCard");
+      const resText = document.getElementById("gachaResultText");
+      resCard.style.display = "block";
+      resText.textContent = `「${picked.label}」を獲得しました！`;
+    }
+
+    function useItem(index) {
+      const item = state.items[index];
+      if (!item) return;
+
+      if (item.type === "food") {
+        state.hunger = clampStat(state.hunger + 25);
+        state.happiness = clampStat(state.happiness + 10);
+        state.items.splice(index, 1);
+      } else if (item.type === "decor") {
+        state.equippedDecor = state.equippedDecor === item.name ? "なし" : item.name;
+      } else if (item.type === "accessory") {
+        state.equippedAccessory = state.equippedAccessory === item.name ? "" : item.name;
+      }
+
+      saveState();
+      renderAll();
+    }
+
+    function renderInventory() {
+      const wrap = document.getElementById("inventoryList");
+      if (state.items.length === 0) {
+        wrap.innerHTML = `<span class="small-note">アイテムがありません。ガチャやQRで手に入れましょう！</span>`;
+        return;
+      }
+
+      wrap.innerHTML = state.items
+        .map((item, idx) => {
+          let label = item.name;
+          let extraClass = "";
+          if (item.type === "food") {
+            label = `🍖 ${item.name}（あげる）`;
+          } else if (item.type === "decor") {
+            const active = state.equippedDecor === item.name;
+            label = `🛋️ ${item.name}${active ? "（配置中）" : ""}`;
+            if (active) extraClass = "selected";
+          } else if (item.type === "accessory") {
+            const active = state.equippedAccessory === item.name;
+            label = `${item.name}${active ? "（装着中）" : ""}`;
+            if (active) extraClass = "selected";
+          }
+          return `<button type="button" class="action-btn ${extraClass}" data-item-idx="${idx}">${label}</button>`;
+        })
+        .join("");
+
+      wrap.querySelectorAll("[data-item-idx]").forEach((btn) => {
+        btn.addEventListener("click", () => useItem(Number(btn.dataset.itemIdx)));
+      });
+    }
+
+    function renderAll() {
+      document.documentElement.style.setProperty("--font-scale", state.fontScale);
+      document.querySelectorAll("[data-scale]").forEach((btn) => {
+        btn.classList.toggle("selected", Number(btn.dataset.scale) === Number(state.fontScale));
+      });
+
+      document.getElementById("userIconDisplay").textContent = state.userIcon;
+      document.getElementById("userNameDisplay").textContent = state.userName;
+      document.getElementById("charAccessoryDisplay").textContent = state.equippedAccessory;
+      document.getElementById("roomDecorDisplay").textContent = `インテリア：${state.equippedDecor}`;
+
+      document.getElementById("hungerText").textContent = `${state.hunger} / 100`;
+      document.getElementById("hungerBar").style.width = `${state.hunger}%`;
+      document.getElementById("happyText").textContent = `${state.happiness} / 100`;
+      document.getElementById("happyBar").style.width = `${state.happiness}%`;
+
+      const floorDist = Math.floor(state.totalDistance);
+      const remainder = floorDist % METERS_PER_TICKET;
+      const toNext = remainder === 0 ? METERS_PER_TICKET : METERS_PER_TICKET - remainder;
+
+      document.getElementById("distanceDisplay").textContent = formatDistance(state.totalDistance);
+      document.getElementById("nextTicketNote").textContent = `次のガチャ券まで：あと ${toNext} m`;
+      document.getElementById("ticketDisplay").textContent = `${state.tickets} 枚`;
+      document.getElementById("gachaBtn").disabled = state.tickets <= 0;
+
+      renderInventory();
+      renderRanking();
+      renderCoupons();
+    }
+
+    function renderRanking() {
+      const combined = [
+        ...DUMMY_OTHERS,
+        {
+          id: "me",
+          name: state.userName,
+          icon: state.userIcon,
+          distance: Math.floor(state.totalDistance),
+          isMe: true
+        }
+      ].sort((a, b) => b.distance - a.distance);
+
+      const myIndex = combined.findIndex((u) => u.isMe);
+      document.getElementById("myRankSummary").textContent =
+        `あなた（${state.userName}）：${myIndex + 1}位 ／ ${formatDistance(state.totalDistance)}`;
+
+      const top50 = combined.slice(0, 50);
+      const listEl = document.getElementById("rankingList");
+      listEl.innerHTML = top50
+        .map(
+          (u, idx) => `
+          <div class="list-row ${u.isMe ? "me" : ""}">
+            <span>${idx + 1}位</span>
+            <span>${u.icon} ${u.name}${u.isMe ? "（自分）" : ""}</span>
+            <span>${u.distance}m</span>
+          </div>
+        `
+        )
+        .join("");
+    }
+
+    function renderCoupons() {
+      const listEl = document.getElementById("couponList");
+      if (state.coupons.length === 0) {
+        listEl.innerHTML = `<div class="card">まだクーポンがありません。ガチャやQRで獲得してみましょう！</div>`;
+        return;
+      }
+      listEl.innerHTML = state.coupons
+        .map(
+          (c) => `
+          <div class="list-row">
+            <div>🏬 <strong>${c.shop}</strong></div>
+            <strong>${c.discount}</strong>
+          </div>
+        `
+        )
+        .join("");
+    }
+
+    // QRコード特典付与処理
+    function handleScannedQrCode(rawText) {
+      const code = (rawText || "").trim();
+      const reward = QR_REWARDS[code];
+      const resCard = document.getElementById("qrResultCard");
+      const resText = document.getElementById("qrResultText");
+      resCard.style.display = "block";
+
+      if (!reward) {
+        resText.textContent = `未登録のQRコードです（読み取り値: ${code || "空"}）`;
+        return;
+      }
+
+      if (state.claimedQrCodes.includes(code)) {
+        resText.textContent = `${reward.title} のQRコードはすでに受け取り済みです。`;
+        return;
+      }
+
+      state.claimedQrCodes.push(code);
+      state.items.push(reward.item);
+      if (reward.item.type === "decor") state.equippedDecor = reward.item.name;
+      if (reward.item.type === "accessory") state.equippedAccessory = reward.item.name;
+      state.coupons.unshift(reward.coupon);
+
+      saveState();
+      renderAll();
+      resText.textContent =
+        `${reward.title} から「${reward.item.label}」と「${reward.coupon.shop}（${reward.coupon.discount}）」を獲得！`;
+    }
+
+    // カメラ＆jsQRスキャナー制御
+    const qrVideo = document.getElementById("qrVideo");
+    const qrCanvas = document.getElementById("qrCanvas");
+    const qrCtx = qrCanvas.getContext("2d", { willReadFrequently: true });
+    let qrStream = null;
+    let qrRafId = null;
+
+    async function startQrCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        document.getElementById("qrStatusText").textContent =
+          "この環境ではカメラAPIを利用できません（テストボタンをお試しください）";
+        return;
+      }
+
+      try {
+        qrStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        qrVideo.srcObject = qrStream;
+        qrVideo.style.display = "block";
+        document.getElementById("qrPlaceholder").style.display = "none";
+        document.getElementById("startQrBtn").disabled = true;
+        document.getElementById("stopQrBtn").disabled = false;
+        document.getElementById("qrStatusText").textContent = "QRコードをスキャン中...";
+        await qrVideo.play();
+        scanQrFrame();
+      } catch (err) {
+        document.getElementById("qrStatusText").textContent =
+          `カメラを起動できませんでした: ${err.message}`;
+      }
+    }
+
+    function stopQrCamera() {
+      if (qrRafId !== null) {
+        cancelAnimationFrame(qrRafId);
+        qrRafId = null;
+      }
+      if (qrStream) {
+        qrStream.getTracks().forEach((t) => t.stop());
+        qrStream = null;
+      }
+      qrVideo.pause();
+      qrVideo.srcObject = null;
+      qrVideo.style.display = "none";
+      document.getElementById("qrPlaceholder").style.display = "block";
+      document.getElementById("startQrBtn").disabled = false;
+      document.getElementById("stopQrBtn").disabled = true;
+      document.getElementById("qrStatusText").textContent = "カメラを停止しました";
+    }
+
+    function scanQrFrame() {
+      if (!qrStream) return;
+      if (qrVideo.readyState === qrVideo.HAVE_ENOUGH_DATA) {
+        qrCanvas.width = qrVideo.videoWidth;
+        qrCanvas.height = qrVideo.videoHeight;
+        qrCtx.drawImage(qrVideo, 0, 0, qrCanvas.width, qrCanvas.height);
+        const imageData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert"
+        });
+        if (code && code.data) {
+          stopQrCamera();
+          handleScannedQrCode(code.data);
+          return;
+        }
+      }
+      qrRafId = requestAnimationFrame(scanQrFrame);
+    }
+
+    document.getElementById("startQrBtn").addEventListener("click", startQrCamera);
+    document.getElementById("stopQrBtn").addEventListener("click", stopQrCamera);
+
+    document.querySelectorAll("[data-sim-qr]").forEach((btn) => {
+      btn.addEventListener("click", () => handleScannedQrCode(btn.dataset.simQr));
+    });
+
+    // ミニゲーム制御
+    const mgModal = document.getElementById("minigameModal");
+    const mgStage = document.getElementById("mgStage");
+    const mgTarget = document.getElementById("mgTarget");
+    let mgInterval = null;
+    let mgScore = 0;
+    let mgRunning = false;
+
+    function moveMgTarget() {
+      const maxX = mgStage.clientWidth - 40;
+      const maxY = mgStage.clientHeight - 40;
+      const x = 20 + Math.random() * Math.max(20, maxX);
+      const y = 20 + Math.random() * Math.max(20, maxY);
+      mgTarget.style.left = `${x}px`;
+      mgTarget.style.top = `${y}px`;
+    }
+
+    function startMinigame() {
+      mgScore = 0;
+      mgRunning = true;
+      let leftSec = 5.0;
+      document.getElementById("mgScore").textContent = "0";
+      document.getElementById("mgTimer").textContent = "5.0";
+      document.getElementById("mgResultNote").textContent = "ハートをタップしよう！";
+      mgModal.classList.add("open");
+      moveMgTarget();
+
+      clearInterval(mgInterval);
+      mgInterval = setInterval(() => {
+        leftSec = Math.max(0, Number((leftSec - 0.1).toFixed(1)));
+        document.getElementById("mgTimer").textContent = leftSec.toFixed(1);
+        if (leftSec <= 0) {
+          clearInterval(mgInterval);
+          mgRunning = false;
+          const gain = Math.min(25, Math.max(5, mgScore * 2));
+          state.happiness = clampStat(state.happiness + gain);
+          saveState();
+          renderAll();
+          document.getElementById("mgResultNote").textContent =
+            `終了！嬉しさが +${gain} 上がりました！`;
+        }
+      }, 100);
+    }
+
+    mgTarget.addEventListener("click", () => {
+      if (!mgRunning) return;
+      mgScore += 1;
+      document.getElementById("mgScore").textContent = String(mgScore);
+      moveMgTarget();
+    });
+
+    document.getElementById("openMinigameBtn").addEventListener("click", startMinigame);
+    document.getElementById("closeMinigameBtn").addEventListener("click", () => {
+      clearInterval(mgInterval);
+      mgRunning = false;
+      mgModal.classList.remove("open");
+    });
+
+    // タブ・設定・モーダル制御（別タブへ移ったらカメラも停止）
+    const tabButtons = document.querySelectorAll(".tab-btn");
+    const screens = document.querySelectorAll(".screen");
+    tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.dataset.target;
+        if (targetId !== "qr") stopQrCamera();
+        tabButtons.forEach((b) => b.classList.toggle("active", b === btn));
+        screens.forEach((s) => s.classList.toggle("active", s.id === targetId));
+      });
+    });
+
+    document.querySelectorAll("[data-scale]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.fontScale = Number(btn.dataset.scale);
+        saveState();
+        renderAll();
+      });
+    });
+
+    const modal = document.getElementById("profileModal");
+    const usernameInput = document.getElementById("usernameInput");
+    let selectedIcon = state.userIcon;
+
+function openProfileModal(isInitial) {
+      document.getElementById("modalTitle").textContent = isInitial ? "ユーザー登録" : "プロファイル編集";
+      usernameInput.value = state.registered ? state.userName : "";
+      selectedIcon = state.userIcon;
+      document.querySelectorAll("#iconChoices [data-icon]").forEach((b) => {
+        b.classList.toggle("selected", b.dataset.icon === selectedIcon);
+      });
+      modal.classList.add("open");
+    }
+
+    document.querySelectorAll("#iconChoices [data-icon]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedIcon = btn.dataset.icon;
+        document.querySelectorAll("#iconChoices [data-icon]").forEach((b) => {
+          b.classList.toggle("selected", b === btn);
+        });
+      });
+    });
+
+    document.getElementById("saveProfileBtn").addEventListener("click", () => {
+      const name = usernameInput.value.trim();
+      state.userName = name || "ゲスト";
+      state.userIcon = selectedIcon;
+      state.registered = true;
+      saveState();
+      renderAll();
+      modal.classList.remove("open");
+    });
+
+    document.getElementById("openProfileBtn").addEventListener("click", () => openProfileModal(false));
+
+    document.querySelectorAll("[data-add-dist]").forEach((btn) => {
+      btn.addEventListener("click", () => addDistance(Number(btn.dataset.addDist)));
+    });
+
+    document.getElementById("gachaBtn").addEventListener("click", pullGacha);
+
+    document.getElementById("toggleGpsBtn").addEventListener("click", () => {
+      if (watchId !== null) stopGps();
+      else startGps();
+    });
+
+    document.getElementById("resetDataBtn").addEventListener("click", () => {
+      stopGps();
+      stopQrCamera();
+      clearInterval(mgInterval);
+      mgRunning = false;
+      state = {
+        ...DEFAULT_STATE,
+        items: [{ type: "food", name: "ほねっこ", label: "餌：ほねっこ" }],
+        claimedQrCodes: []
+      };
+      saveState();
+      document.getElementById("gachaResultCard").style.display = "none";
+      document.getElementById("qrResultCard").style.display = "none";
+      renderAll();
+      openProfileModal(true);
+    });
+
+    renderAll();
+    if (!state.registered) {
+      openProfileModal(true);
+    }
+  </script>
+</body>
+</html>
